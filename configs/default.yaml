@@ -1,0 +1,32 @@
+seed: 42
+
+data:
+  csv_path: data/raw/timeseries.csv
+  datetime_column: timestamp
+  target_column: target
+  sequence_length: 48
+  validation_fraction: 0.15
+  test_fraction: 0.15
+
+features:
+  columns:
+    - feature_1
+    - feature_2
+    - feature_3
+
+model:
+  type: transformer
+  hidden_size: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.20
+
+training:
+  epochs: 120
+  batch_size: 64
+  learning_rate: 0.001
+  weight_decay: 0.00001
+  patience: 15
+
+output:
+  directory: results
