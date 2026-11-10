@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 import json
 import random
 from pathlib import Path
@@ -17,6 +18,7 @@ from src.dataset import SequenceDataset, make_sequences
 from src.models.lstm import LSTMRegressor
 from src.models.transformer import TransformerRegressor
 from src.preprocessing import load_timeseries
+from training_recovery import EpochCheckpoint
 
 
 def set_seed(seed):
@@ -48,7 +50,7 @@ def build_model(cfg, input_size, sequence_length):
     raise ValueError("model.type must be 'lstm' or 'transformer'")
 
 
-def main(config_path):
+def main(config_path, checkpoint_dir=None, resume=False):
     with open(config_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
@@ -124,10 +126,17 @@ def main(config_path):
     model_name = cfg["model"]["type"].lower()
     checkpoint = out / f"{model_name}_best.pt"
 
-    best, stale = float("inf"), 0
+    recovery=EpochCheckpoint(checkpoint_dir or out/"recovery",{"cfg":cfg})
+    stateful={"model":model,"optimizer":optimizer}
+    best, stale, best_state, start_epoch = float("inf"), 0, None, 0
     history = []
+    if resume:
+        restored=recovery.restore(stateful,device=device)
+        start_epoch=restored["epoch"];best=restored["best"];stale=restored["stale"]
+        best_state=restored["best_state"];history=restored["history"]
+        print(f"Resuming after epoch {start_epoch}")
 
-    for epoch in range(1, int(cfg["training"]["epochs"]) + 1):
+    for epoch in range(start_epoch+1, int(cfg["training"]["epochs"]) + 1):
         model.train()
         train_losses = []
 
@@ -162,17 +171,17 @@ def main(config_path):
         if val_loss < best:
             best = val_loss
             stale = 0
-            torch.save({
-                "model_state": model.state_dict(),
-                "features": features,
-                "config": cfg,
-            }, checkpoint)
+            best_state=deepcopy(model.state_dict())
         else:
             stale += 1
-            if stale >= int(cfg["training"]["patience"]):
-                print("Early stopping.")
-                break
+        recovery.save(epoch,stateful,{"best":best,"stale":stale,
+                                      "best_state":best_state,"history":history})
+        if stale >= int(cfg["training"]["patience"]):
+            print("Early stopping.")
+            break
 
+    if best_state is None: raise RuntimeError("No best validation model")
+    torch.save({"model_state":best_state,"features":features,"config":cfg},checkpoint)
     joblib.dump(scaler, out / "scaler.joblib")
     np.save(out / "x_test.npy", x_test)
     np.save(out / "y_test.npy", y_test)
@@ -186,5 +195,7 @@ def main(config_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/default.yaml")
+    parser.add_argument("--checkpoint-dir",help="Persistent epoch recovery path")
+    parser.add_argument("--resume",action="store_true")
     args = parser.parse_args()
-    main(args.config)
+    main(args.config,args.checkpoint_dir,args.resume)
