@@ -24,6 +24,8 @@ timestamp,target,feature_1,feature_2,feature_3
 
 Edit `data.csv_path`, `data.datetime_column`, `data.target_column`, and `features.columns` in `configs/default.yaml` to match another dataset. Rows are sorted chronologically, and feature scaling is fitted on the training period only. The default split is chronological; retain this protocol or document any changes when comparing results.
 
+The target column cannot also be an input feature. Windows include feature values at the target timestamp, so they are suitable only when those values are available at prediction time. Audit derived features and timestamps for future information; the target-column check cannot detect indirect leakage.
+
 ## Setup and run
 
 From the repository root:

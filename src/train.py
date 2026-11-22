@@ -18,6 +18,7 @@ from src.dataset import SequenceDataset, make_sequences
 from src.models.lstm import LSTMRegressor
 from src.models.transformer import TransformerRegressor
 from src.preprocessing import load_timeseries
+from src.validation import validate_feature_columns
 from training_recovery import EpochCheckpoint
 
 
@@ -57,8 +58,9 @@ def main(config_path, checkpoint_dir=None, resume=False):
     set_seed(cfg["seed"])
 
     dc = cfg["data"]
-    features = list(cfg["features"]["columns"])
+    features = cfg["features"]["columns"]
     target = dc["target_column"]
+    validate_feature_columns(features, target)
     dt_col = dc["datetime_column"]
     seq_len = int(dc["sequence_length"])
 
